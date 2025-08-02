@@ -3,7 +3,7 @@
 """
 这是一个 Python 脚本，用于将 Minecraft 存档文件夹链接到版本文件夹
 以便在不同版本之间共享存档和其他资源。
-上次编辑时间：2025年7月3日
+上次编辑时间：2025年7月10日
 作者：Sakurakugu
 """
 
@@ -20,8 +20,7 @@ MC_根目录 = "D:\\Software\\Games\\我的世界\\.minecraft"
 待处理的目录 = []
 目标存档路径 = os.path.join(MC_根目录, "saves")
 含mod但也处理的存档目录 = [
-    "1.21.6-Fabric 0.16.14",
-    "1.21.7-Fabric 0.16.14"
+    "1.21.8-Fabric 0.16.14"
 ]
 要链接的文件夹 = [
     "resourcepacks",  # 资源包
@@ -32,20 +31,30 @@ MC_根目录 = "D:\\Software\\Games\\我的世界\\.minecraft"
     "screenshots"     # 截图
 ]
 
-# 函数：输出日志
-def write_log(level, message):
-    """输出日志"""
-    colors = {
-        "INFO": "\033[92m信息\033[0m",
-        "WARN": "\033[93m警告\033[0m", 
-        "NOTICE": "\033[93m注意\033[0m",
-        "ERROR": "\033[91m错误\033[0m",
-        "DEBUG": "\033[33m调试\033[0m",
-        "LOG": "\033[0m日志\033[0m"  # 默认日志颜色
-    }
-    
-    color_level = colors.get(level.upper(), "日志")
-    print(f"[{color_level}] {message}")
+# 配置日志输出
+log_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'log')
+try:
+    from lib.log import logging, set_log_path, set_log_level, setup_logging
+    set_log_path(os.path.join(log_dir, '版本隔离.log')) # 设置自定义日志文件名
+    set_log_level(logging.INFO) # 设置日志级别
+    setup_logging() # 重新设置日志配置
+except ImportError:
+    import os
+    import logging
+    # 确保日志目录存在（相对于脚本文件位置）
+    if not os.path.exists(log_dir):
+        os.makedirs(log_dir, exist_ok=True)
+
+    logging.basicConfig(
+        level="DEBUG",
+        handlers=[
+            logging.StreamHandler(), 
+            logging.FileHandler(os.path.join(log_dir, '版本隔离.log'), encoding='utf-8')
+        ],
+        format='%(asctime)s - %(levelname)-8s - %(lineno)-3d - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+# logging.info("-"*50)
 
 # 函数：创建符号链接
 def 创建软链接(待创路径, 目标路径):
@@ -58,7 +67,7 @@ def 创建软链接(待创路径, 目标路径):
             else:
                 os.remove(待创路径)
         else:
-            # write_log("LOG", f"目录 \"{os.path.basename(待创路径)}\" 已是符号链接，跳过")
+            logging.debug(f"目录 \"{os.path.basename(待创路径)}\" 已是符号链接，跳过")
             return
     
     try:
@@ -71,16 +80,16 @@ def 创建软链接(待创路径, 目标路径):
                 encoding='gbk'
             )
             if result.returncode != 0:
-                write_log("ERROR", f"创建符号链接失败：{result.stderr}")
-                write_log("ERROR", "请检查权限或路径是否正确。")
+                logging.error(f"创建符号链接失败：{result.stderr}")
+                logging.error("请检查权限或路径是否正确。")
             else:
-                write_log("INFO", f"创建符号链接成功：\"{待创路径}\" ===>> \"{目标路径}\"")
+                logging.info(f"创建符号链接成功：\"{待创路径}\" ===>> \"{目标路径}\"")
         else:
             # 在Unix-like系统上使用os.symlink
             os.symlink(目标路径, 待创路径)
-            write_log("INFO", f"创建符号链接成功：\"{待创路径}\" ===>> \"{目标路径}\"")
+            logging.info(f"创建符号链接成功：\"{待创路径}\" ===>> \"{目标路径}\"")
     except Exception as e:
-        write_log("ERROR", f"创建符号链接时出错：{str(e)}")
+        logging.error(f"创建符号链接时出错：{str(e)}")
 
 # 函数：移动文件夹内容并处理重名
 def 移动文件夹内容(源路径, 目标路径, 版本名字=""):
@@ -120,11 +129,11 @@ def 移动文件夹内容(源路径, 目标路径, 版本名字=""):
                 新项目路径 = os.path.join(目标路径, f"{文件名} ({count}){扩展名}")
             count += 1
         
-        write_log("INFO", f"移动 \"{原始名称}\" 到 \"{新项目路径}\"...")
+        logging.info(f"移动 \"{原始名称}\" 到 \"{新项目路径}\"...")
         try:
             shutil.move(项目路径, 新项目路径)
         except Exception as e:
-            write_log("ERROR", f"移动文件失败：{str(e)}")
+            logging.error(f"移动文件失败：{str(e)}")
             
 # 函数：判断路径是否为符号链接
 def isLink(path):
@@ -146,10 +155,10 @@ def 处理文件夹目录(源目录, 文件夹类型, 目标文件夹路径, 版
     if os.path.exists(源文件夹路径): # 检查源文件夹是否存在
         if not isLink(源文件夹路径): # 如果源文件夹不是符号链接
         # if not os.path.islink(源文件夹路径): 
-            write_log("INFO", f"正在移动 \"{源文件夹路径}\" 中的内容到 \"{目标文件夹路径}\"...")
+            logging.info(f"正在移动 \"{源文件夹路径}\" 中的内容到 \"{目标文件夹路径}\"...")
             移动文件夹内容(源文件夹路径, 目标文件夹路径, 版本名字)
     else:
-        write_log("INFO", f"路径 \"{文件夹类型}\" 不存在，正在创建...")
+        logging.info(f"路径 \"{文件夹类型}\" 不存在，正在创建...")
     
     创建软链接(源文件夹路径, 目标文件夹路径)
 
@@ -168,7 +177,7 @@ def 添加待处理的目录到列表():
                 if os.path.exists(mod文件夹路径):
                     # 如果属于含mod但也处理的存档目录，则不跳过
                     if 版本名 not in 含mod但也处理的存档目录:
-                        write_log("INFO", f"该版本 {版本名} 存在mod文件夹，跳过文件夹处理")
+                        logging.info(f"该版本 {版本名} 存在mod文件夹，跳过文件夹处理")
                         continue
                 待处理的目录.append(entry_path)
     
@@ -184,7 +193,7 @@ def 添加待处理的目录到列表():
                     if os.path.exists(mod文件夹路径):
                         # 如果属于含mod但也处理的存档目录，则不跳过
                         if 版本名 not in 含mod但也处理的存档目录:
-                            write_log("INFO", f"该版本 {版本名} 存在mod文件夹，跳过文件夹处理")
+                            logging.info(f"该版本 {版本名} 存在mod文件夹，跳过文件夹处理")
                             continue
                     待处理的目录.append(entry_path)
 
@@ -201,7 +210,7 @@ def main():
     添加待处理的目录到列表()
     
     for 目录 in 待处理的目录:
-        write_log("INFO", f"正在处理目录 \"{目录}\"...")
+        logging.info(f"正在处理目录 \"{目录}\"...")
         
         # 获取版本名称（如果是版本目录）
         版本名字 = ""
@@ -216,10 +225,10 @@ def main():
 if __name__ == "__main__":
     try:
         main()
-        print("\n脚本执行完成！")
+        logging.info("脚本执行完成！")
     except KeyboardInterrupt:
-        print("\n脚本被用户中断")
+        logging.info("脚本被用户中断")
     except Exception as e:
-        print(f"\n脚本执行时出现错误：{str(e)}")
+        logging.error(f"脚本执行时出现错误：{str(e)}")
         import traceback
-        traceback.print_exc()
+        logging.error(traceback.format_exc())
