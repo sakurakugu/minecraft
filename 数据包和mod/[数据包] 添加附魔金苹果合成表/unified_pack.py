@@ -10,7 +10,6 @@ import shutil
 import zipfile
 from pathlib import Path
 from datetime import datetime
-import re
 from packaging import version
 
 class UnifiedDatapackBuilder:
@@ -146,6 +145,80 @@ class UnifiedDatapackBuilder:
         else:
             return "modern"
     
+    def get_advancement_format_for_version(self, target_version):
+        """根据版本自动检测advancement格式
+        
+        Args:
+            target_version: 目标版本号字符串
+            
+        Returns:
+            str: "legacy" 如果版本 <= 1.20.4，"modern" 如果版本 > 1.20.4
+        """
+        if self.compare_version(target_version, "1.20.4") <= 0:
+            return "legacy"
+        else:
+            return "modern"
+    
+    def convert_advancement_format(self, advancement_data, target_format):
+        """转换advancement文件格式
+        
+        Args:
+            advancement_data: advancement文件的JSON数据
+            target_format: 目标格式 ("legacy" 或 "modern")
+            
+        Returns:
+            dict: 转换后的advancement数据
+        """
+        # 深拷贝数据以避免修改原始数据
+        import copy
+        converted_data = copy.deepcopy(advancement_data)
+        
+        # 递归处理所有criteria中的items字段
+        def convert_items_field(obj):
+            if isinstance(obj, dict):
+                for key, value in obj.items():
+                    if key == "items":
+                        # 处理items字段，可能有两种结构：
+                        # 1. "items": ["minecraft:gold_block"] (在对象内部)
+                        # 2. "items": [{"items": ["minecraft:gold_block"]}] (外层数组)
+                        if isinstance(value, list):
+                            # 检查是否是外层数组结构
+                            if len(value) > 0 and isinstance(value[0], dict) and "items" in value[0]:
+                                # 这是外层数组结构，需要处理内部的items
+                                for item_obj in value:
+                                    if isinstance(item_obj, dict) and "items" in item_obj:
+                                        inner_items = item_obj["items"]
+                                        if target_format == "legacy":
+                                            # legacy格式：保持数组
+                                            if isinstance(inner_items, str):
+                                                item_obj["items"] = [inner_items]
+                                        elif target_format == "modern":
+                                            # modern格式：转换为字符串
+                                            if isinstance(inner_items, list) and len(inner_items) == 1:
+                                                item_obj["items"] = inner_items[0]
+                            else:
+                                # 这是直接的items数组，处理转换
+                                if target_format == "legacy":
+                                    # legacy格式：保持数组
+                                    if isinstance(value, str):
+                                        obj[key] = [value]
+                                elif target_format == "modern":
+                                    # modern格式：转换为字符串
+                                    if len(value) == 1:
+                                        obj[key] = value[0]
+                        elif isinstance(value, str):
+                            # 字符串格式
+                            if target_format == "legacy":
+                                obj[key] = [value]
+                    else:
+                        convert_items_field(value)
+            elif isinstance(obj, list):
+                for item in obj:
+                    convert_items_field(item)
+        
+        convert_items_field(converted_data)
+        return converted_data
+    
     def find_version_config_for_target(self, target_version):
         """根据目标版本号找到对应的版本配置
         
@@ -231,6 +304,17 @@ class UnifiedDatapackBuilder:
     
     def generate_recipe_file(self, target_version):
         """生成合成表文件内容"""
+        # 从src目录读取基础模板
+        src_recipe_file = self.src_dir / "data" / "minecraft" / "recipe" / "enchanted_golden_apple.json"
+        
+        if not src_recipe_file.exists():
+            raise FileNotFoundError(f"源合成表文件不存在: {src_recipe_file}")
+        
+        # 读取基础模板
+        with open(src_recipe_file, 'r', encoding='utf-8') as f:
+            recipe = json.load(f)
+        
+        # 根据版本调整格式
         recipe_format_name = self.get_recipe_format_for_version(target_version)
         result_key = self.get_result_key_for_version(target_version)
         
@@ -240,49 +324,90 @@ class UnifiedDatapackBuilder:
         else:
             key_format = "object"
         
-        # 根据格式类型生成不同的key结构
+        # 调整key结构以适应不同版本
         if key_format == 'string':
             # 简化格式：直接使用字符串
-            key_structure = {
-                "#": "minecraft:gold_block",
-                "X": "minecraft:apple"
-            }
+            if "key" in recipe:
+                for key, value in recipe["key"].items():
+                    if isinstance(value, dict) and "item" in value:
+                        # 从对象格式转换为字符串格式
+                        recipe["key"][key] = value["item"]
         else:
             # 对象格式：使用item包装
-            key_structure = {
-                "#": {
-                    "item": "minecraft:gold_block"
-                },
-                "X": {
-                    "item": "minecraft:apple"
-                }
-            }
+            if "key" in recipe:
+                for key, value in recipe["key"].items():
+                    if isinstance(value, str):
+                        # 从字符串格式转换为对象格式
+                        recipe["key"][key] = {"item": value}
         
-        # 基础合成表结构
-        recipe = {
-            "type": "minecraft:crafting_shaped",
-            "group": "enchanted_golden_apple",
-            "category": "misc",
-            "key": key_structure,
-            "pattern": [
-                "###",
-                "#X#",
-                "###"
-            ],
-            "result": {
-                result_key: "minecraft:enchanted_golden_apple",
-                "count": 1
-            }
-        }
+        # 调整result字段的key名称
+        if "result" in recipe:
+            current_result = recipe["result"].copy()
+            # 移除旧的key
+            if "item" in current_result:
+                del recipe["result"]["item"]
+            if "id" in current_result:
+                del recipe["result"]["id"]
+            
+            # 设置正确的key
+            recipe["result"][result_key] = "minecraft:enchanted_golden_apple"
+            if "count" in current_result:
+                recipe["result"]["count"] = current_result["count"]
+            else:
+                recipe["result"]["count"] = 1
         
         return recipe
     
-    def copy_advancement_files(self, build_version_dir):
-        """复制进度文件"""
+    def copy_advancement_files(self, build_version_dir, target_version):
+        """复制并转换进度文件格式
+        
+        Args:
+            build_version_dir: 构建目录
+            target_version: 目标版本号
+        """
         src_advancement_dir = self.src_dir / "data" / "minecraft" / "advancements"
-        if src_advancement_dir.exists():
-            dest_advancement_dir = build_version_dir / "data" / "minecraft" / "advancements"
-            shutil.copytree(src_advancement_dir, dest_advancement_dir, dirs_exist_ok=True)
+        if not src_advancement_dir.exists():
+            return
+        
+        dest_advancement_dir = build_version_dir / "data" / "minecraft" / "advancements"
+        dest_advancement_dir.mkdir(parents=True, exist_ok=True)
+        
+        # 获取目标格式
+        target_format = self.get_advancement_format_for_version(target_version)
+        
+        # 递归复制并转换advancement文件
+        for root, dirs, files in os.walk(src_advancement_dir):
+            root_path = Path(root)
+            relative_path = root_path.relative_to(src_advancement_dir)
+            dest_root = dest_advancement_dir / relative_path
+            
+            # 创建目录
+            dest_root.mkdir(parents=True, exist_ok=True)
+            
+            # 处理文件
+            for file in files:
+                src_file = root_path / file
+                dest_file = dest_root / file
+                
+                if file.endswith('.json'):
+                    # 处理JSON advancement文件
+                    try:
+                        with open(src_file, 'r', encoding='utf-8') as f:
+                            advancement_data = json.load(f)
+                        
+                        # 转换格式
+                        converted_data = self.convert_advancement_format(advancement_data, target_format)
+                        
+                        # 写入转换后的文件
+                        with open(dest_file, 'w', encoding='utf-8') as f:
+                            json.dump(converted_data, f, ensure_ascii=False, indent=2)
+                    except Exception as e:
+                        print(f"  警告: advancement文件转换失败 {src_file}: {e}")
+                        # 如果转换失败，直接复制原文件
+                        shutil.copy2(src_file, dest_file)
+                else:
+                    # 非JSON文件直接复制
+                    shutil.copy2(src_file, dest_file)
     
     def build_version(self, version_key, version_config):
         """构建单个版本的数据包"""
@@ -323,7 +448,7 @@ class UnifiedDatapackBuilder:
                 json.dump(recipe_content, f, ensure_ascii=False, indent=2)
             
             # 4. 复制进度文件
-            self.copy_advancement_files(build_version_dir)
+            self.copy_advancement_files(build_version_dir, target_version)
             
             print(f"  ✓ 构建完成: {build_version_dir.name}")
             return build_version_dir
@@ -400,7 +525,7 @@ class UnifiedDatapackBuilder:
                 json.dump(recipe_content, f, ensure_ascii=False, indent=2)
             
             # 4. 复制进度文件
-            self.copy_advancement_files(build_version_dir)
+            self.copy_advancement_files(build_version_dir, target_version)
             
             # 显示使用的格式信息
             print(f"  ✓ 构建完成: {build_version_dir.name}")
