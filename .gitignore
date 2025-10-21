@@ -2,5 +2,9 @@
 log/
 *.log
 
+# 构建文件
+build/
+
 # 其他
 __pycache__/
+存档/

@@ -1,0 +1,29 @@
+{
+  "versions": {
+    "1.14.0-1.20.4": {
+      "version_range": ["1.14.0", "1.20.4"],
+      "datapack_range": [4, 26]
+    },
+    "1.20.5-1.20.6": {
+      "version_range": ["1.20.5", "1.20.6"],
+      "datapack_range": [27, 41]
+    },
+    "1.21.0-1.21.1": {
+      "version_range": ["1.21.0", "1.21.1"],
+      "datapack_range": [42, 48]
+    },
+    "1.21.2-1.21.8": {
+      "version_range": ["1.21.2", "1.21.8"],
+      "datapack_range": [49, 81]
+    },
+    "1.21.9-1.21.11": {
+      "version_range": ["1.21.9", "1.21.11"],
+      "datapack_range": [82, 89]
+    }
+  },
+  "_comments": {
+    "version_range": "版本范围数组 [最小版本, 最大版本]，用于版本匹配",
+    "datapack_range": "统一的格式范围数组 [最小格式, 最大格式]，支持小数格式（如 [82.0, 89.0]）",
+    "auto_format_selection": "系统会根据输入版本号和 datapack_range 自动生成对应的格式配置"
+  }
+}
