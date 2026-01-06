@@ -37,7 +37,7 @@ MC_根目录 = "D:\\Software\\Games\\我的世界\\.minecraft"
 待处理的目录 = []
 目标存档路径 = os.path.join(MC_根目录, "saves")
 含mod但也处理的存档目录 = [
-    "1.21.9",
+    "1.21.11",
     "1.21.10 原版"
 ]
 要链接的文件夹 = [
@@ -49,30 +49,7 @@ MC_根目录 = "D:\\Software\\Games\\我的世界\\.minecraft"
     "screenshots"     # 截图
 ]
 
-# 配置日志输出
-log_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'log')
-try:
-    from lib.log import logging, set_log_path, set_log_level, setup_logging
-    set_log_path(os.path.join(log_dir, '版本隔离.log')) # 设置自定义日志文件名
-    set_log_level(logging.INFO) # 设置日志级别
-    setup_logging() # 重新设置日志配置
-except ImportError:
-    import os
-    import logging
-    # 确保日志目录存在（相对于脚本文件位置）
-    if not os.path.exists(log_dir):
-        os.makedirs(log_dir, exist_ok=True)
-
-    logging.basicConfig(
-        level="DEBUG",
-        handlers=[
-            logging.StreamHandler(), 
-            logging.FileHandler(os.path.join(log_dir, '版本隔离.log'), encoding='utf-8')
-        ],
-        format='%(asctime)s - %(levelname)-8s - %(lineno)-3d - %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
-    )
-# logging.info("-"*50)
+logger = init_logger()
 
 # 函数：创建符号链接
 def 创建软链接(待创路径, 目标路径):

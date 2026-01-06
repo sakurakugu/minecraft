@@ -18,7 +18,11 @@
     },
     "1.21.9-1.21.11": {
       "version_range": ["1.21.9", "1.21.11"],
-      "datapack_range": [82, 89]
+      "datapack_range": [82, 94.1]
+    },
+    "26.1": {
+      "version_range": ["26.1", "26.1"],
+      "datapack_range": [95, 95]
     }
   },
   "_comments": {

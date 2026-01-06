@@ -6,8 +6,12 @@ Write-Host "数据包统一构建工具"
 Write-Host "========================================"
 Write-Host ""
 
+# 获取脚本所在目录
+$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
+$pythonScript = Join-Path $scriptDir "unified_pack.py"
+
 Write-Host "可用版本列表:"
-python unified_pack.py --list
+python $pythonScript --list
 
 Write-Host ""
 set /p version="请输入要构建的版本: "
